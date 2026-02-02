@@ -62,6 +62,7 @@ namespace OnnxPeriment.Forms
             this.progressBar_ram = new ProgressBar();
             this.groupBox_monitoring = new GroupBox();
             this.label_info_messageId = new Label();
+            this.button_unload = new Button();
             ((System.ComponentModel.ISupportInitialize) this.pictureBox_view).BeginInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_images).BeginInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_messages).BeginInit();
@@ -131,6 +132,7 @@ namespace OnnxPeriment.Forms
             // 
             // button_deleteImage
             // 
+            this.button_deleteImage.Enabled = false;
             this.button_deleteImage.Location = new Point(651, 349);
             this.button_deleteImage.Name = "button_deleteImage";
             this.button_deleteImage.Size = new Size(75, 23);
@@ -293,6 +295,7 @@ namespace OnnxPeriment.Forms
             // 
             // button_loadContext
             // 
+            this.button_loadContext.Enabled = false;
             this.button_loadContext.Location = new Point(651, 410);
             this.button_loadContext.Name = "button_loadContext";
             this.button_loadContext.Size = new Size(75, 23);
@@ -313,6 +316,7 @@ namespace OnnxPeriment.Forms
             // 
             // button_saveContextJson
             // 
+            this.button_saveContextJson.Enabled = false;
             this.button_saveContextJson.Location = new Point(651, 381);
             this.button_saveContextJson.Name = "button_saveContextJson";
             this.button_saveContextJson.Size = new Size(75, 23);
@@ -404,11 +408,22 @@ namespace OnnxPeriment.Forms
             this.label_info_messageId.TabIndex = 32;
             this.label_info_messageId.Text = "Message #";
             // 
+            // button_unload
+            // 
+            this.button_unload.Location = new Point(651, 671);
+            this.button_unload.Name = "button_unload";
+            this.button_unload.Size = new Size(75, 23);
+            this.button_unload.TabIndex = 33;
+            this.button_unload.Text = "Unload";
+            this.button_unload.UseVisualStyleBackColor = true;
+            this.button_unload.Click += this.button_unload_Click;
+            // 
             // WindowMain
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
             this.ClientSize = new Size(1224, 721);
+            this.Controls.Add(this.button_unload);
             this.Controls.Add(this.label_info_messageId);
             this.Controls.Add(this.groupBox_monitoring);
             this.Controls.Add(this.button_saveContextJson);
@@ -436,6 +451,8 @@ namespace OnnxPeriment.Forms
             this.Controls.Add(this.checkBox_enableCuda);
             this.Controls.Add(this.button_loadOnnxModel);
             this.Controls.Add(this.listBox_log);
+            this.MaximumSize = new Size(1240, 760);
+            this.MinimumSize = new Size(1240, 760);
             this.Name = "WindowMain";
             this.Text = "Onnx Experiment (Forms UI)";
             ((System.ComponentModel.ISupportInitialize) this.pictureBox_view).EndInit();
@@ -484,5 +501,6 @@ namespace OnnxPeriment.Forms
         private ProgressBar progressBar_ram;
         private GroupBox groupBox_monitoring;
         private Label label_info_messageId;
+        private Button button_unload;
     }
 }

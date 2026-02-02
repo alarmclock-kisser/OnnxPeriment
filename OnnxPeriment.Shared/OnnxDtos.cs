@@ -8,6 +8,7 @@ namespace OnnxPeriment.Shared
     public record GenAiSettings
     {
         public int MaxLength { get; init; } = 2048;
+        public int MaxNewTokens { get; init; } = 256;
         public float Temperature { get; init; } = 0.0f; // 0.0 = Deterministic/OCR Modus
         public float TopP { get; init; } = 0.9f;
         public int TopK { get; init; } = 40;

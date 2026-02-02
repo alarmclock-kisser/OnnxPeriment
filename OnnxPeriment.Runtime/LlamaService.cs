@@ -633,8 +633,16 @@ namespace OnnxPeriment.Runtime
 
                 await Task.Run(() =>
                 {
-                    this._weights = LLamaWeights.LoadFromFile(modelParams);
-                    this._context = this._weights.CreateContext(modelParams);
+                    try
+                    {
+                        this._weights = LLamaWeights.LoadFromFile(modelParams);
+                        this._context = this._weights.CreateContext(modelParams);
+                    }
+                    catch (Exception ex)
+                    {
+                        StaticLogger.Log(ex);
+                        throw;
+                    }
                 });
 
                 this._modelParams = modelParams;
@@ -822,7 +830,7 @@ namespace OnnxPeriment.Runtime
             return minIndex;
         }
 
-        public async Task<string?> GenerateTextToTextAsync(string prompt, LlamaGenerateOptions? options = null, string? context = null)
+        public async Task<string?> GenerateTextToTextAsync(string prompt, LlamaGenerateOptions? options = null, string? context = null, CancellationToken ct = default)
         {
             options ??= new LlamaGenerateOptions();
 
@@ -838,7 +846,7 @@ namespace OnnxPeriment.Runtime
                 };
 
                 var sb = new StringBuilder();
-                await foreach (var chunk in this.GenerateTextStreamingAsync(request))
+                await foreach (var chunk in this.GenerateTextStreamingAsync(request, ct))
                 {
                     if (chunk.Stats != null)
                     {
@@ -858,12 +866,12 @@ namespace OnnxPeriment.Runtime
             }
         }
 
-        public async Task<string?> GenerateTextWithImagesToTextAsync(string prompt, string[]? base64Images = null, LlamaGenerateOptions? options = null, string? context = null)
+        public async Task<string?> GenerateTextWithImagesToTextAsync(string prompt, string[]? base64Images = null, LlamaGenerateOptions? options = null, string? context = null, CancellationToken ct = default)
         {
             options ??= new LlamaGenerateOptions();
             if (base64Images == null || base64Images.Count() <= 0)
             {
-                return await GenerateTextToTextAsync(prompt, options, context);
+                return await GenerateTextToTextAsync(prompt, options, context, ct);
             }
 
             StaticLogger.Log($"Generating text from prompt with {base64Images?.Length ?? 0} images: {prompt} with options: {options}...");

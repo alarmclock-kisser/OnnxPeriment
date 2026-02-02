@@ -22,6 +22,9 @@ namespace OnnxPeriment.Forms
         internal DateTime? PromptSent = null;
 
 
+        private CancellationTokenSource? CtsGenerate;
+
+
 
         internal bool ZoomImages => this.checkBox_zoomImage.Checked;
         internal bool AddImage => this.checkBox_includeImage.Checked;
@@ -37,7 +40,7 @@ namespace OnnxPeriment.Forms
 
             this.Onnx = new OnnxService();
             this.Llama = new LlamaService();
-            this.Images = new ImageCollection(true);
+            this.Images = new ImageCollection();
             this.Update_Numeric_Images();
 
             this.Load += (_, __) => UpdateBackendButtons();
@@ -331,12 +334,13 @@ namespace OnnxPeriment.Forms
                 return;
             }
 
-            if (!this.Llama.ModelIsLoaded)
+            if (!this.Llama.ModelIsLoaded && !this.Onnx.ModelIsLoaded)
             {
                 return;
             }
+            bool useOnnx = this.Onnx.ModelIsLoaded;
 
-            int pairCount = this.Llama.GetContextMessagePairCount();
+            int pairCount = useOnnx ? this.Onnx.GetContextMessagePairCount() : this.Llama.GetContextMessagePairCount();
             int maxValue = showEmpty ? pairCount + 1 : pairCount;
 
             if (maxValue < 0)
@@ -398,7 +402,7 @@ namespace OnnxPeriment.Forms
                 return;
             }
 
-            var messages = this.Llama.GetContextMessagesPair(targetValue);
+            var messages = useOnnx ? this.Onnx.GetContextMessagesPair(targetValue) : this.Llama.GetContextMessagesPair(targetValue);
             string prompt = string.Empty;
             string response = string.Empty;
 
@@ -422,8 +426,8 @@ namespace OnnxPeriment.Forms
                 }
             }
 
-            this.textBox_prompt.Text = prompt;
-            this.textBox_response.Text = response;
+            this.textBox_prompt.Text = NormalizeNewlines(prompt);
+            this.textBox_response.Text = NormalizeNewlines(response);
             this.textBox_response.SelectionStart = this.textBox_response.Text.Length;
             this.textBox_response.ScrollToCaret();
         }
@@ -442,7 +446,20 @@ namespace OnnxPeriment.Forms
         {
             if (this.Onnx.ModelIsLoaded)
             {
-
+                try
+                {
+                    int msgCount = this.Onnx.GetContextMessagePairCount();
+                    if (msgCount == 0 || this._updatingMessages || (int) this.numericUpDown_messages.Value > msgCount)
+                    {
+                        return;
+                    }
+                    this._updatingMessages = true;
+                    this.UpdateMessageNavigation(showEmpty: true);
+                }
+                finally
+                {
+                    this._updatingMessages = false;
+                }
             }
             else if (this.Llama.ModelIsLoaded)
             {
@@ -462,6 +479,19 @@ namespace OnnxPeriment.Forms
                     this._updatingMessages = false;
                 }
             }
+        }
+
+        private static string NormalizeNewlines(string? text)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                return string.Empty;
+            }
+
+            return text
+                .Replace("\\r\\n", Environment.NewLine)
+                .Replace("\\n", Environment.NewLine)
+                .Replace("\\r", Environment.NewLine);
         }
 
 
@@ -546,6 +576,8 @@ namespace OnnxPeriment.Forms
                     this.checkBox_enableCuda.Invoke((MethodInvoker) (() =>
                     {
                         this.checkBox_enableCuda.Enabled = false;
+                        this.button_loadContext.Enabled = true;
+                        this.button_saveContextJson.Enabled = true;
                     }));
                 }
             }
@@ -594,6 +626,8 @@ namespace OnnxPeriment.Forms
                     this.checkBox_enableCuda.Invoke((MethodInvoker) (() =>
                     {
                         this.checkBox_enableCuda.Enabled = false;
+                        this.button_loadContext.Enabled = true;
+                        this.button_saveContextJson.Enabled = true;
                     }));
                 }
             }
@@ -619,14 +653,15 @@ namespace OnnxPeriment.Forms
                 {
                     if (this.Onnx.ModelIsLoaded)
                     {
-
+                        var ctx = await this.Onnx.LoadContextAsync(contextPath);
                     }
                     else if (this.Llama.ModelIsLoaded)
                     {
                         var ctx = await this.Llama.LoadContextAsync(contextPath);
-                        this.UpdateMessageNavigation(jumpToLatest: true);
-                        this.UpdateStatus();
                     }
+
+                    this.UpdateMessageNavigation(jumpToLatest: true);
+                    this.UpdateStatus();
                 }
                 catch (Exception ex)
                 {
@@ -637,12 +672,7 @@ namespace OnnxPeriment.Forms
 
         private void numericUpDown_messages_ValueChanged(object sender, EventArgs e)
         {
-            if (this.Onnx.ModelIsLoaded)
-            {
-                return;
-            }
-
-            if (!this.Llama.ModelIsLoaded)
+            if (!this.Llama.ModelIsLoaded && !this.Onnx.ModelIsLoaded)
             {
                 return;
             }
@@ -699,7 +729,11 @@ namespace OnnxPeriment.Forms
         {
             if (this.Onnx.ModelIsLoaded)
             {
-
+                var savedPath = await this.Onnx.SaveActiveContextAsNewAsync();
+                if (string.IsNullOrWhiteSpace(savedPath))
+                {
+                    MessageBox.Show("Failed to save context.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
             }
             else if (this.Llama.ModelIsLoaded)
             {
@@ -712,6 +746,9 @@ namespace OnnxPeriment.Forms
 
             this.UpdateStatus();
         }
+
+
+
 
         // Request / Response
         private async void textBox_prompt_KeyDown(object sender, KeyEventArgs e)
@@ -777,7 +814,7 @@ namespace OnnxPeriment.Forms
             }
         }
 
-        private async void button_send_Click(object sender, EventArgs e)
+        private async void button_send_Click(object? sender, EventArgs? e)
         {
             if (string.IsNullOrWhiteSpace(this.textBox_prompt.Text))
             {
@@ -819,7 +856,6 @@ namespace OnnxPeriment.Forms
             if (this.AddImage && string.IsNullOrWhiteSpace(image))
             {
                 StaticLogger.Log("OCR request cancelled: no valid image data prepared.");
-                return;
             }
 
             this.PromptSent = DateTime.UtcNow;
@@ -837,9 +873,13 @@ namespace OnnxPeriment.Forms
             };
             this.ResponseTimer.Start();
 
+            this.CtsGenerate = new CancellationTokenSource();
             this.BeginInvoke((MethodInvoker) (() =>
             {
-                this.button_send.Enabled = false;
+                this.button_send.Text = "[CT]";
+                this.button_send.BackColor = System.Drawing.Color.Red;
+                this.button_send.Click -= this.button_send_Click;
+                this.button_send.Click += this.button_cancel_Click;
                 this.textBox_prompt.Enabled = false;
             }));
 
@@ -881,7 +921,7 @@ namespace OnnxPeriment.Forms
             }
             else if (this.Onnx.ModelIsLoaded)
             {
-                response = await this.Onnx.RunOcrPromptAsync(image ?? string.Empty, prompt);
+                response = await this.Onnx.RunPromptAsync(prompt, image);
                 this.label_stats.BeginInvoke((MethodInvoker) (() =>
                 {
                     this.label_stats.Text = "No stats available.";
@@ -904,7 +944,7 @@ namespace OnnxPeriment.Forms
 
             this.textBox_response.Invoke((MethodInvoker) (() =>
             {
-                this.textBox_response.AppendText(response + Environment.NewLine + Environment.NewLine);
+                this.textBox_response.AppendText(NormalizeNewlines(response) + Environment.NewLine + Environment.NewLine);
                 this.textBox_response.SelectionStart = this.textBox_response.Text.Length;
                 this.textBox_response.ScrollToCaret();
             }));
@@ -913,10 +953,32 @@ namespace OnnxPeriment.Forms
             this.BeginInvoke((MethodInvoker) (() =>
             {
                 this.button_send.Enabled = true;
+                this.button_send.Text = "Send";
+                this.button_send.BackColor = System.Drawing.Color.FromKnownColor(System.Drawing.KnownColor.Control);
+                this.button_send.Click -= this.button_cancel_Click;
+                this.button_send.Click += this.button_send_Click;
                 this.textBox_prompt.Enabled = true;
             }));
 
             await StaticLogger.LogAsync("Elapsed time for prompt: " + (DateTime.UtcNow - this.PromptSent.Value).TotalSeconds.ToString("F3") + " sec.");
+        }
+
+        private void button_cancel_Click(object? sender, EventArgs? e)
+        {
+            this.CtsGenerate?.Cancel();
+            this.ResponseTimer?.Stop();
+            this.label_timer.Invoke((MethodInvoker) (() =>
+            {
+                this.label_timer.Text = "Cancelled";
+            }));
+            this.BeginInvoke((MethodInvoker) (() =>
+            {
+                this.button_send.Text = "Send";
+                this.button_send.BackColor = System.Drawing.Color.FromKnownColor(System.Drawing.KnownColor.Control);
+                this.button_send.Click -= this.button_cancel_Click;
+                this.button_send.Click += this.button_send_Click;
+                this.textBox_prompt.Enabled = true;
+            }));
         }
 
         private void button_backendsOnnx_Click(object sender, EventArgs e)
@@ -1066,6 +1128,21 @@ namespace OnnxPeriment.Forms
             }
         }
 
-        
+        private void button_unload_Click(object sender, EventArgs e)
+        {
+            this.Llama.UnloadModel();
+            this.Onnx.UnloadModel();
+
+            this.BeginInvoke((MethodInvoker) (() =>
+            {
+                this.checkBox_enableCuda.Enabled = true;
+                this.button_loadContext.Enabled = false;
+                this.button_saveContextJson.Enabled = false;
+                this.button_loadLlamaModel.Enabled = true;
+                this.button_loadOnnxModel.Enabled = true;
+            }));
+
+            this.UpdateStatus();
+        }
     }
 }

@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="OnnxPeriment.Core/OnnxPeriment.Core.csproj" />
+  <Project Path="OnnxPeriment.Forms/OnnxPeriment.Forms.csproj" />
+  <Project Path="OnnxPeriment.Runtime/OnnxPeriment.Runtime.csproj" />
+  <Project Path="OnnxPeriment.Shared/OnnxPeriment.Shared.csproj" />
+</Solution>

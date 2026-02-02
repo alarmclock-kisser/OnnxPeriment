@@ -1,0 +1,588 @@
+﻿using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using System.IO;
+using SixLabors.ImageSharp.Drawing.Processing;
+using OnnxPeriment.Core;
+
+namespace LocalLlmTestDataGenerator.Core
+{
+	public class ImageObj : IDisposable
+	{
+		public readonly Guid Id = Guid.NewGuid();
+		public readonly DateTime CreatedAt = DateTime.UtcNow;
+
+		public string FilePath { get; set; } = string.Empty;
+		public Image<Rgba32>? Img { get; set; } = null;
+		public int Width { get; private set; } = 0;
+		public int Height { get; private set; } = 0;
+
+		public int Channels => 4;
+		public int BitDepth => 8;
+
+		public double SizeInKb => this.Width * this.Height * 4 / 1024.0;
+
+		public IntPtr Pointer { get; set; } = nint.Zero;
+		public bool OnHost => this.Img != null;
+		public bool OnDevice => this.Pointer != nint.Zero;
+
+
+		public ImageObj(Image<Rgba32> img)
+		{
+			try
+			{
+				ArgumentNullException.ThrowIfNull(img);
+				this.Img = img;
+				this.Width = img.Width;
+				this.Height = img.Height;
+			}
+			catch (Exception ex)
+			{
+				LogException(ex, "Failed to initialize ImageObj from Image instance.");
+				throw;
+			}
+		}
+
+		public async Task<string?> GetThumbnailBase64Async(int diagonalSize = 128)
+		{
+			try
+			{
+				if (diagonalSize <= 0)
+				{
+					throw new ArgumentOutOfRangeException(nameof(diagonalSize));
+				}
+
+				Image<Rgba32>? source = this.Img;
+				Image<Rgba32>? loaded = null;
+				try
+				{
+					if (source == null && !string.IsNullOrWhiteSpace(this.FilePath) && File.Exists(this.FilePath))
+					{
+						loaded = await Image.LoadAsync<Rgba32>(this.FilePath);
+						source = loaded;
+					}
+
+					if (source == null || source.Width <= 0 || source.Height <= 0)
+					{
+						return null;
+					}
+
+					var maxDim = Math.Max(source.Width, source.Height);
+					var scale = diagonalSize / (double)maxDim;
+					var targetWidth = Math.Max(1, (int)Math.Round(source.Width * scale));
+					var targetHeight = Math.Max(1, (int)Math.Round(source.Height * scale));
+
+					using var thumb = source.Clone(ctx => ctx.Resize(targetWidth, targetHeight));
+					using var ms = new MemoryStream();
+					await thumb.SaveAsPngAsync(ms);
+					return Convert.ToBase64String(ms.ToArray());
+				}
+				finally
+				{
+					loaded?.Dispose();
+				}
+			}
+			catch (Exception ex)
+			{
+				LogException(ex, "Failed to generate thumbnail.");
+				return null;
+			}
+		}
+
+		public ImageObj(int width, int height, string hexColor = "#000000")
+		{
+			try
+			{
+				if (width <= 0 || height <= 0)
+				{
+					throw new ArgumentOutOfRangeException(nameof(width), "Width and height must be positive.");
+				}
+
+				this.Width = width;
+				this.Height = height;
+				var color = Color.ParseHex(hexColor).ToPixel<Rgba32>();
+				var img = new Image<Rgba32>(width, height);
+				img.Mutate(c => c.Clear(color));
+				this.Img = img;
+			}
+			catch (Exception ex)
+			{
+				LogException(ex, "Failed to initialize ImageObj with color.");
+				throw;
+			}
+		}
+
+		public ImageObj(byte[] imageData, int width, int height)
+		{
+			try
+			{
+				if (width <= 0 || height <= 0)
+				{
+					throw new ArgumentOutOfRangeException(nameof(width), "Width and height must be positive.");
+				}
+
+				ArgumentNullException.ThrowIfNull(imageData);
+				var expectedLength = width * height * 4;
+				if (imageData.Length != expectedLength)
+				{
+					throw new ArgumentException($"Image data length {imageData.Length} does not match expected {expectedLength}.", nameof(imageData));
+				}
+
+				this.Width = width;
+				this.Height = height;
+				this.Img = Image.LoadPixelData<Rgba32>(imageData, width, height);
+			}
+			catch (Exception ex)
+			{
+				LogException(ex, "Failed to initialize ImageObj from raw data.");
+				throw;
+			}
+		}
+
+		public ImageObj(string filePath)
+		{
+			try
+			{
+				ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+				if (!File.Exists(filePath))
+				{
+					throw new FileNotFoundException("Image file not found.", filePath);
+				}
+
+				this.FilePath = filePath;
+				this.Img = Image.Load<Rgba32>(filePath);
+				this.Width = this.Img.Width;
+				this.Height = this.Img.Height;
+			}
+			catch (Exception ex)
+			{
+				LogException(ex, $"Failed to load ImageObj from file '{filePath}'.");
+				throw;
+			}
+		}
+
+		public ImageObj(Stream stream)
+		{
+			try
+			{
+				ArgumentNullException.ThrowIfNull(stream);
+				this.Img = Image.Load<Rgba32>(stream);
+				this.Width = this.Img.Width;
+				this.Height = this.Img.Height;
+			}
+			catch (Exception ex)
+			{
+				LogException(ex, "Failed to load ImageObj from stream.");
+				throw;
+			}
+		}
+
+		public byte[] GetImageData(bool nullImg = true)
+		{
+			try
+			{
+				if (this.Img == null || this.Width <= 0 || this.Height <= 0)
+				{
+					return Array.Empty<byte>();
+				}
+				var data = new byte[this.Width * this.Height * 4];
+				this.Img.CopyPixelDataTo(data);
+				if (nullImg)
+				{
+					this.Img.Dispose();
+					this.Img = null;
+					this.Width = 0;
+					this.Height = 0;
+				}
+				return data;
+			}
+			catch (Exception ex)
+			{
+				LogException(ex, "Failed to get image data.");
+				return Array.Empty<byte>();
+			}
+		}
+
+		public async Task<byte[]> GetImageDataAsync(bool nullImg = true)
+		{
+			try
+			{
+				if (this.Img == null || this.Width <= 0 || this.Height <= 0)
+				{
+					return Array.Empty<byte>();
+				}
+
+				var data = new byte[this.Width * this.Height * 4];
+				await Task.Run(() => this.Img.CopyPixelDataTo(data));
+
+				if (nullImg)
+				{
+					this.Img.Dispose();
+					this.Img = null;
+					this.Width = 0;
+					this.Height = 0;
+				}
+
+				return data;
+			}
+			catch (Exception ex)
+			{
+				LogException(ex, "Failed to get image data.");
+				return Array.Empty<byte>();
+			}
+		}
+
+		public string? GetBase64ImageData(bool nullImg = true)
+		{
+			try
+			{
+				var imageData = this.GetImageData(nullImg);
+				if (imageData.Length == 0)
+				{
+					return null;
+				}
+				return Convert.ToBase64String(imageData);
+			}
+			catch (Exception ex)
+			{
+				LogException(ex, "Failed to get base64 image data.");
+				return null;
+			}
+		}
+
+		public async Task<string?> GetBase64ImageDataAsync(bool nullImg = true)
+		{
+			try
+			{
+				var imageData = await this.GetImageDataAsync(nullImg);
+				if (imageData.Length == 0)
+				{
+					return null;
+				}
+				return Convert.ToBase64String(imageData);
+			}
+			catch (Exception ex)
+			{
+				LogException(ex, "Failed to get base64 image data.");
+				return null;
+			}
+		}
+
+		public async Task<string?> GetPngBase64Async(bool nullImg = true)
+		{
+			try
+			{
+				Image<Rgba32>? source = this.Img;
+				Image<Rgba32>? loaded = null;
+				try
+				{
+					if (source == null && !string.IsNullOrWhiteSpace(this.FilePath) && File.Exists(this.FilePath))
+					{
+						loaded = await Image.LoadAsync<Rgba32>(this.FilePath);
+						source = loaded;
+					}
+
+					if (source == null || source.Width <= 0 || source.Height <= 0)
+					{
+						return null;
+					}
+
+					using var ms = new MemoryStream();
+					await source.SaveAsPngAsync(ms);
+					var bytes = ms.ToArray();
+
+					if (nullImg)
+					{
+						// If the source was the internal Img, dispose it.
+						if (ReferenceEquals(source, this.Img) && this.Img != null)
+						{
+							this.Img.Dispose();
+							this.Img = null;
+							this.Width = 0;
+							this.Height = 0;
+						}
+					}
+
+					return Convert.ToBase64String(bytes);
+				}
+				finally
+				{
+					loaded?.Dispose();
+				}
+			}
+			catch (Exception ex)
+			{
+				LogException(ex, "Failed to get PNG base64 image data.");
+				return null;
+			}
+		}
+
+
+		public bool SetImageData(byte[] imageData, bool nullPointer = true)
+		{
+			try
+			{
+				if (imageData == null || imageData.Length == 0 || this.Width <= 0 || this.Height <= 0)
+				{
+					return false;
+				}
+				var expectedLength = this.Width * this.Height * 4;
+				if (imageData.Length != expectedLength)
+				{
+					return false;
+				}
+				this.Img?.Dispose();
+				this.Img = Image.LoadPixelData<Rgba32>(imageData, this.Width, this.Height);
+				if (nullPointer)
+				{
+					this.Pointer = nint.Zero;
+				}
+				return true;
+			}
+			catch (Exception ex)
+			{
+				LogException(ex, "Failed to set image data.");
+				return false;
+			}
+		}
+
+		public async Task<bool> SetImageDataAsync(byte[] imageData, bool nullPointer = true)
+		{
+			try
+			{
+				if (imageData == null || imageData.Length == 0 || this.Width <= 0 || this.Height <= 0)
+				{
+					return false;
+				}
+
+				var expectedLength = this.Width * this.Height * 4;
+				if (imageData.Length != expectedLength)
+				{
+					return false;
+				}
+
+				this.Img?.Dispose();
+				this.Img = await Task.Run(() => Image.LoadPixelData<Rgba32>(imageData, this.Width, this.Height));
+
+				if (nullPointer)
+				{
+					this.Pointer = nint.Zero;
+				}
+
+				return true;
+			}
+			catch (Exception ex)
+			{
+				LogException(ex, "Failed to set image data.");
+				return false;
+			}
+		}
+
+		public bool SetImageBase64Data(string base64Data, bool nullPointer = true)
+		{
+			try
+			{
+				if (string.IsNullOrWhiteSpace(base64Data))
+				{
+					return false;
+				}
+				var imageData = Convert.FromBase64String(base64Data);
+				return this.SetImageData(imageData, nullPointer);
+			}
+			catch (Exception ex)
+			{
+				LogException(ex, "Failed to set image from base64 data.");
+				return false;
+			}
+		}
+
+		public async Task<bool> SetImageBase64DataAsync(string base64Data, bool nullPointer = true)
+		{
+			try
+			{
+				if (string.IsNullOrWhiteSpace(base64Data))
+				{
+					return false;
+				}
+				var imageData = Convert.FromBase64String(base64Data);
+				return await this.SetImageDataAsync(imageData, nullPointer);
+			}
+			catch (Exception ex)
+			{
+				LogException(ex, "Failed to set image from base64 data.");
+				return false;
+			}
+		}
+
+
+		public string? Export(string path, string format = "png")
+		{
+			try
+			{
+				Image<Rgba32>? source = this.Img;
+				Image<Rgba32>? loaded = null;
+				try
+				{
+					if (source == null && !string.IsNullOrWhiteSpace(this.FilePath) && File.Exists(this.FilePath))
+					{
+						loaded = Image.Load<Rgba32>(this.FilePath);
+						source = loaded;
+					}
+
+					if (source == null)
+					{
+						return null;
+					}
+
+					switch (format.ToLower())
+					{
+						case "png":
+							source.SaveAsPng(path);
+							break;
+						case "jpeg":
+						case "jpg":
+							source.SaveAsJpeg(path);
+							break;
+						case "bmp":
+							source.SaveAsBmp(path);
+							break;
+						case "gif":
+							source.SaveAsGif(path);
+							break;
+						default:
+							throw new ArgumentException($"Unsupported image format: {format}", nameof(format));
+					}
+
+					return path;
+				}
+				finally
+				{
+					loaded?.Dispose();
+				}
+			}
+			catch (Exception ex)
+			{
+				LogException(ex, "Failed to export image.");
+				return null;
+			}
+		}
+
+		public async Task<string?> ExportAsync(string path, string format = "png")
+		{
+			try
+			{
+				Image<Rgba32>? source = this.Img;
+				Image<Rgba32>? loaded = null;
+				try
+				{
+					if (source == null && !string.IsNullOrWhiteSpace(this.FilePath) && File.Exists(this.FilePath))
+					{
+						loaded = await Image.LoadAsync<Rgba32>(this.FilePath);
+						source = loaded;
+					}
+
+					if (source == null)
+					{
+						return null;
+					}
+
+					await Task.Run(() =>
+					{
+						switch (format.ToLower())
+						{
+							case "png":
+								source.SaveAsPng(path);
+								break;
+							case "jpeg":
+							case "jpg":
+								source.SaveAsJpeg(path);
+								break;
+							case "bmp":
+								source.SaveAsBmp(path);
+								break;
+							case "gif":
+								source.SaveAsGif(path);
+								break;
+							default:
+								throw new ArgumentException($"Unsupported image format: {format}", nameof(format));
+						}
+					});
+
+					return path;
+				}
+				finally
+				{
+					loaded?.Dispose();
+				}
+			}
+			catch (Exception ex)
+			{
+				LogException(ex, "Failed to export image.");
+				return null;
+			}
+		}
+
+
+
+		public async Task<ImageObj?> CloneAsync()
+		{
+			try
+			{
+				if (this.Img == null)
+				{
+					return await Task.FromResult<ImageObj?>(null);
+				}
+
+				var clonedImg = this.Img.Clone();
+				var clone = new ImageObj(clonedImg)
+				{
+					Pointer = nint.Zero
+				};
+
+				return clone;
+			}
+			catch (Exception ex)
+			{
+				LogException(ex, "Failed to clone image.");
+				return null;
+			}
+		}
+
+
+		public void Dispose()
+		{
+			try
+			{
+				this.Img?.Dispose();
+			}
+			catch (Exception ex)
+			{
+				LogException(ex, "Failed to dispose ImageObj.");
+			}
+			finally
+			{
+				this.Img = null;
+				this.Pointer = nint.Zero;
+				GC.SuppressFinalize(this);
+			}
+		}
+
+		private static void LogException(Exception ex, string message)
+		{
+			try
+			{
+				StaticLogger.Log($"{message} Exception: {ex}");
+                Console.WriteLine($"{message} Exception: {ex}");
+			}
+			catch
+			{
+				// Swallow logging errors to avoid secondary failures
+			}
+		}
+	}
+}

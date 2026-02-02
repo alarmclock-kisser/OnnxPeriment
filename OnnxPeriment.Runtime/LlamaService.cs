@@ -24,6 +24,7 @@ namespace OnnxPeriment.Runtime
         private LLamaWeights? _weights;
         private LLamaContext? _context;
         private readonly Dictionary<string, LlamaChatContext> _contexts = new(StringComparer.OrdinalIgnoreCase);
+        private LlamaChatContext? _activeContext;
 
         public string? LoadedContextFile { get; private set; }
 
@@ -219,6 +220,7 @@ namespace OnnxPeriment.Runtime
 
                 _contexts[context.Name] = context;
                 this.LoadedContextFile = resolved;
+                this._activeContext = context;
                 return context;
             });
         }
@@ -238,12 +240,17 @@ namespace OnnxPeriment.Runtime
                     _contexts[context.Name] = context;
                 }
 
+                this._activeContext = context;
                 return context;
             });
         }
 
-        public async Task<bool> SaveContextAsync(string name)
+        public async Task<bool> SaveContextAsync(string? name = null)
         {
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                name = this._activeContext?.Name;
+            }
             if (string.IsNullOrWhiteSpace(name))
             {
                 return false;
@@ -279,40 +286,156 @@ namespace OnnxPeriment.Runtime
                 File.WriteAllText(path, json, Encoding.UTF8);
                 _contexts[context.Name] = context;
                 this.LoadedContextFile = path;
+                this._activeContext = context;
                 return true;
             });
         }
 
-        public async Task<bool> DeleteContextAsync(string name)
+        private LlamaChatContext? ResolveActiveContext()
         {
-            var normalized = NormalizeContextName(name);
-            if (string.IsNullOrWhiteSpace(normalized))
+            if (this._activeContext != null)
             {
-                return false;
+                return this._activeContext;
             }
 
-            return await Task.Run(() =>
+            if (!string.IsNullOrWhiteSpace(this.LoadedContextFile) && File.Exists(this.LoadedContextFile))
             {
-                var dir = GetContextDirectory();
-                var safeName = SanitizeContextName(normalized);
-                var path = Path.Combine(dir, safeName + ".json");
-
-                if (!File.Exists(path))
+                var loaded = LoadContextFromFile(this.LoadedContextFile);
+                if (loaded != null)
                 {
-                    _contexts.Remove(name);
-                    return false;
+                    this._activeContext = loaded;
+                    _contexts[loaded.Name] = loaded;
+                    return loaded;
                 }
+            }
 
-                File.Delete(path);
-                _contexts.Remove(name);
-                return true;
-            });
+            return _contexts.Values
+                .OrderByDescending(context => context.UpdatedAt)
+                .FirstOrDefault();
         }
 
-        private static string GetContextDirectory()
+        public int GetContextMessagePairCount()
         {
-            var baseDir = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            return Path.Combine(baseDir, "OnnxPeriment_Contexts");
+            var context = ResolveActiveContext();
+            if (context == null)
+            {
+                return 0;
+            }
+
+            var count = context.Messages?.Count ?? 0;
+            return (count + 1) / 2;
+        }
+
+        public List<LlamaChatMessage> GetContextMessagesPair(int? index = null)
+        {
+            var context = ResolveActiveContext();
+            if (context == null)
+            {
+                return [];
+            }
+
+            var allMessages = context.Messages ?? [];
+            if (index == null)
+            {
+                return [.. allMessages];
+            }
+
+            var pairIndex = index.Value;
+            if (pairIndex <= 0)
+            {
+                return [];
+            }
+
+            int start = (pairIndex - 1) * 2;
+            if (start >= allMessages.Count)
+            {
+                return [];
+            }
+
+            var result = new List<LlamaChatMessage> { allMessages[start] };
+            if (start + 1 < allMessages.Count)
+            {
+                result.Add(allMessages[start + 1]);
+            }
+
+            return result;
+        }
+
+        private async Task<ManagedContext?> ResolveContextAsync(string? contextName)
+        {
+            if (contextName == null)
+            {
+                return null;
+            }
+
+            var normalized = NormalizeContextName(contextName);
+            if (string.IsNullOrWhiteSpace(normalized))
+            {
+                var transient = new LlamaChatContext
+                {
+                    Name = GenerateTransientContextName(),
+                    UpdatedAt = DateTime.UtcNow
+                };
+                this._activeContext = transient;
+                return new ManagedContext
+                {
+                    Context = transient,
+                    AutoSave = false,
+                    IsTransient = true
+                };
+            }
+
+            if (string.Equals(normalized, RecentContextName, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalized, DefaultContextName, StringComparison.OrdinalIgnoreCase))
+            {
+                var resolved = ResolveContextFilePath(normalized);
+                if (resolved != null && File.Exists(resolved))
+                {
+                    var loaded = LoadContextFromFile(resolved);
+                    if (loaded != null)
+                    {
+                        _contexts[loaded.Name] = loaded;
+                        this._activeContext = loaded;
+                        return new ManagedContext { Context = loaded, AutoSave = true, IsTransient = false };
+                    }
+                }
+
+                var fallback = new LlamaChatContext
+                {
+                    Name = DefaultContextName,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                _contexts[fallback.Name] = fallback;
+                this._activeContext = fallback;
+                return new ManagedContext { Context = fallback, AutoSave = true, IsTransient = false };
+            }
+
+            if (_contexts.TryGetValue(normalized, out var cached))
+            {
+                this._activeContext = cached;
+                return new ManagedContext { Context = cached, AutoSave = false, IsTransient = false };
+            }
+
+            var path = ResolveContextFilePath(normalized);
+            if (!string.IsNullOrWhiteSpace(path) && File.Exists(path))
+            {
+                var loaded = LoadContextFromFile(path);
+                if (loaded != null)
+                {
+                    _contexts[loaded.Name] = loaded;
+                    this._activeContext = loaded;
+                    return new ManagedContext { Context = loaded, AutoSave = true, IsTransient = false };
+                }
+            }
+
+            var created = new LlamaChatContext
+            {
+                Name = normalized,
+                UpdatedAt = DateTime.UtcNow
+            };
+            _contexts[created.Name] = created;
+            this._activeContext = created;
+            return new ManagedContext { Context = created, AutoSave = false, IsTransient = false };
         }
 
         private static string? ResolveContextFilePath(string nameOrRecent)
@@ -376,77 +499,6 @@ namespace OnnxPeriment.Runtime
             return "transient-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fff");
         }
 
-        private async Task<ManagedContext?> ResolveContextAsync(string? contextName)
-        {
-            if (contextName == null)
-            {
-                return null;
-            }
-
-            var normalized = NormalizeContextName(contextName);
-            if (string.IsNullOrWhiteSpace(normalized))
-            {
-                var transient = new LlamaChatContext
-                {
-                    Name = GenerateTransientContextName(),
-                    UpdatedAt = DateTime.UtcNow
-                };
-                return new ManagedContext
-                {
-                    Context = transient,
-                    AutoSave = false,
-                    IsTransient = true
-                };
-            }
-
-            if (string.Equals(normalized, RecentContextName, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(normalized, DefaultContextName, StringComparison.OrdinalIgnoreCase))
-            {
-                var resolved = ResolveContextFilePath(normalized);
-                if (resolved != null && File.Exists(resolved))
-                {
-                    var loaded = LoadContextFromFile(resolved);
-                    if (loaded != null)
-                    {
-                        _contexts[loaded.Name] = loaded;
-                        return new ManagedContext { Context = loaded, AutoSave = true, IsTransient = false };
-                    }
-                }
-
-                var fallback = new LlamaChatContext
-                {
-                    Name = DefaultContextName,
-                    UpdatedAt = DateTime.UtcNow
-                };
-                _contexts[fallback.Name] = fallback;
-                return new ManagedContext { Context = fallback, AutoSave = true, IsTransient = false };
-            }
-
-            if (_contexts.TryGetValue(normalized, out var cached))
-            {
-                return new ManagedContext { Context = cached, AutoSave = false, IsTransient = false };
-            }
-
-            var path = ResolveContextFilePath(normalized);
-            if (!string.IsNullOrWhiteSpace(path) && File.Exists(path))
-            {
-                var loaded = LoadContextFromFile(path);
-                if (loaded != null)
-                {
-                    _contexts[loaded.Name] = loaded;
-                    return new ManagedContext { Context = loaded, AutoSave = true, IsTransient = false };
-                }
-            }
-
-            var created = new LlamaChatContext
-            {
-                Name = normalized,
-                UpdatedAt = DateTime.UtcNow
-            };
-            _contexts[created.Name] = created;
-            return new ManagedContext { Context = created, AutoSave = false, IsTransient = false };
-        }
-
         private async Task FinalizeContextAsync(ManagedContext? managed, string prompt, string response)
         {
             if (managed == null)
@@ -474,6 +526,7 @@ namespace OnnxPeriment.Runtime
             }
 
             managed.Context.UpdatedAt = DateTime.UtcNow;
+            this._activeContext = managed.Context;
 
             if (managed.AutoSave)
             {
@@ -839,6 +892,12 @@ namespace OnnxPeriment.Runtime
             }
 
             return text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length;
+        }
+
+        public static string GetContextDirectory()
+        {
+            var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), ".lmstudio", "contexts");
+            return dir;
         }
 
         private static string? FindNativeLibrary(IEnumerable<string> searchRoots, string fileName)

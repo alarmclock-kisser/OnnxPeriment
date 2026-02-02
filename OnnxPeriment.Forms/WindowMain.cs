@@ -6,6 +6,7 @@ using System.Threading;
 using System.Text;
 using OnnxPeriment.Shared;
 using System.Threading.Tasks;
+using Microsoft.Win32;
 
 namespace OnnxPeriment.Forms
 {
@@ -15,7 +16,7 @@ namespace OnnxPeriment.Forms
         internal readonly LlamaService Llama;
         internal readonly ImageCollection Images;
 
-
+        private bool _updatingMessages;
 
         private Timer? ResponseTimer = null;
         internal DateTime? PromptSent = null;
@@ -40,6 +41,16 @@ namespace OnnxPeriment.Forms
             this.Update_Numeric_Images();
 
             this.Load += (_, __) => UpdateBackendButtons();
+        }
+
+        private async void MonitorsUpdateAsync(Object? sender, float[] usages)
+        {
+            if (usages.Length > 0)
+            {
+                this.label_cpuUsage.Text = $"CPU Usage: {usages[0]:F2}%";
+            }
+
+            await Task.CompletedTask;
         }
 
         private void UpdateBackendButtons()
@@ -312,7 +323,120 @@ namespace OnnxPeriment.Forms
             }
         }
 
+        private void UpdateMessageNavigation(bool showEmpty = false, bool jumpToLatest = false)
+        {
+            if (this.InvokeRequired)
+            {
+                this.BeginInvoke((MethodInvoker) (() => this.UpdateMessageNavigation(showEmpty, jumpToLatest)));
+                return;
+            }
 
+            if (!this.Llama.ModelIsLoaded)
+            {
+                return;
+            }
+
+            int pairCount = this.Llama.GetContextMessagePairCount();
+            int maxValue = showEmpty ? pairCount + 1 : pairCount;
+
+            if (maxValue < 0)
+            {
+                maxValue = 0;
+            }
+
+            if (this.numericUpDown_messages.Maximum != maxValue)
+            {
+                this.numericUpDown_messages.Maximum = maxValue;
+            }
+
+            if (maxValue == 0)
+            {
+                this.numericUpDown_messages.Value = 0;
+                this.textBox_prompt.Clear();
+                this.textBox_response.Clear();
+                return;
+            }
+
+            int targetValue = (int) this.numericUpDown_messages.Value;
+            if (showEmpty)
+            {
+                targetValue = maxValue;
+            }
+            else if (jumpToLatest)
+            {
+                targetValue = pairCount;
+            }
+
+            if (targetValue < 1)
+            {
+                targetValue = 1;
+            }
+
+            if (targetValue > maxValue)
+            {
+                targetValue = maxValue;
+            }
+
+            bool wasUpdating = this._updatingMessages;
+            try
+            {
+                this._updatingMessages = true;
+                if (this.numericUpDown_messages.Value != targetValue)
+                {
+                    this.numericUpDown_messages.Value = targetValue;
+                }
+            }
+            finally
+            {
+                this._updatingMessages = wasUpdating;
+            }
+
+            if (showEmpty || targetValue > pairCount)
+            {
+                this.textBox_prompt.Clear();
+                this.textBox_response.Clear();
+                return;
+            }
+
+            var messages = this.Llama.GetContextMessagesPair(targetValue);
+            string prompt = string.Empty;
+            string response = string.Empty;
+
+            foreach (var message in messages)
+            {
+                if (string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase))
+                {
+                    prompt = message.Content;
+                }
+                else if (string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase))
+                {
+                    response = message.Content;
+                }
+                else if (string.IsNullOrEmpty(prompt))
+                {
+                    prompt = message.Content;
+                }
+                else if (string.IsNullOrEmpty(response))
+                {
+                    response = message.Content;
+                }
+            }
+
+            this.textBox_prompt.Text = prompt;
+            this.textBox_response.Text = response;
+            this.textBox_response.SelectionStart = this.textBox_response.Text.Length;
+            this.textBox_response.ScrollToCaret();
+        }
+
+        private void checkBox_monitoring_CheckedChanged(object sender, EventArgs e)
+        {
+
+        }
+
+        private async void numericUpDown_monitorInterval_ValueChanged(object sender, EventArgs e)
+        {
+
+        }
 
         // Images
         private async void button_importImage_Click(object sender, EventArgs e)
@@ -470,6 +594,7 @@ namespace OnnxPeriment.Forms
                     else if (this.Llama.ModelIsLoaded)
                     {
                         var ctx = await this.Llama.LoadContextAsync(contextPath);
+                        this.UpdateMessageNavigation(jumpToLatest: true);
                     }
                 }
                 catch (Exception ex)
@@ -481,17 +606,30 @@ namespace OnnxPeriment.Forms
 
         private void numericUpDown_messages_ValueChanged(object sender, EventArgs e)
         {
-            // Max to current contexts message-pairs (uestion + answer)
             if (this.Onnx.ModelIsLoaded)
             {
-
+                return;
             }
-            else if (this.Llama.ModelIsLoaded)
+
+            if (!this.Llama.ModelIsLoaded)
             {
-
+                return;
             }
 
-            
+            if (this._updatingMessages)
+            {
+                return;
+            }
+
+            try
+            {
+                this._updatingMessages = true;
+                this.UpdateMessageNavigation();
+            }
+            finally
+            {
+                this._updatingMessages = false;
+            }
         }
 
         private void numericUpDown_messages_Click(object sender, EventArgs e)
@@ -499,15 +637,45 @@ namespace OnnxPeriment.Forms
             // If right clicked jump to empty (new message, latest + 1)
             if (this.Onnx.ModelIsLoaded)
             {
+                return;
+            }
+
+            if (!this.Llama.ModelIsLoaded)
+            {
+                return;
+            }
+
+            if (e is MouseEventArgs mouseArgs && mouseArgs.Button == MouseButtons.Left && ModifierKeys.HasFlag(Keys.Control))
+            {
+                if (this._updatingMessages)
+                {
+                    return;
+                }
+
+                try
+                {
+                    this._updatingMessages = true;
+                    this.UpdateMessageNavigation(showEmpty: true);
+                }
+                finally
+                {
+                    this._updatingMessages = false;
+                }
+            }
+        }
+
+        private async void button_saveContextJson_Click(object sender, EventArgs e)
+        {
+            if (this.Onnx.ModelIsLoaded)
+            {
 
             }
             else if (this.Llama.ModelIsLoaded)
             {
-
+                await this.Llama.SaveContextAsync();
             }
+
         }
-
-
 
         // Request / Response
         private async void textBox_prompt_KeyDown(object sender, KeyEventArgs e)
@@ -628,7 +796,7 @@ namespace OnnxPeriment.Forms
             {
                 this.label_timer.Invoke((MethodInvoker) (() =>
                 {
-                    this.label_timer.Text = $"Waiting for response... {(DateTime.UtcNow - this.PromptSent.Value).TotalSeconds:F1}s";
+                    this.label_timer.Text = $"{(DateTime.UtcNow - this.PromptSent.Value).TotalSeconds:F1} sec...";
                 }));
             };
             this.ResponseTimer.Start();
@@ -657,6 +825,22 @@ namespace OnnxPeriment.Forms
                     this.label_stats.Text = stats == null
                         ? "No stats available."
                         : $"tokens={stats.TokenCount}, elapsed={stats.ElapsedSeconds:F2}s, tokens/s={stats.TokensPerSecond:F2}";
+                }));
+
+                this.BeginInvoke((MethodInvoker) (() =>
+                {
+                    if (!this._updatingMessages)
+                    {
+                        this._updatingMessages = true;
+                        try
+                        {
+                            this.UpdateMessageNavigation(jumpToLatest: true);
+                        }
+                        finally
+                        {
+                            this._updatingMessages = false;
+                        }
+                    }
                 }));
             }
             else if (this.Onnx.ModelIsLoaded)
@@ -846,6 +1030,8 @@ namespace OnnxPeriment.Forms
             }
         }
 
-        
+       
+
+
     }
 }

@@ -1,4 +1,5 @@
-﻿namespace OnnxPeriment.Forms
+﻿
+namespace OnnxPeriment.Forms
 {
     partial class WindowMain
     {
@@ -52,9 +53,20 @@
             this.label_context = new Label();
             this.button_loadContext = new Button();
             this.numericUpDown_messages = new NumericUpDown();
+            this.button_saveContextJson = new Button();
+            this.pictureBox_cpuUsage = new PictureBox();
+            this.checkBox_monitoring = new CheckBox();
+            this.numericUpDown_monitorInterval = new NumericUpDown();
+            this.label_cpuUsage = new Label();
+            this.label_ramUsage = new Label();
+            this.progressBar_ram = new ProgressBar();
+            this.groupBox_monitoring = new GroupBox();
             ((System.ComponentModel.ISupportInitialize) this.pictureBox_view).BeginInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_images).BeginInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_messages).BeginInit();
+            ((System.ComponentModel.ISupportInitialize) this.pictureBox_cpuUsage).BeginInit();
+            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_monitorInterval).BeginInit();
+            this.groupBox_monitoring.SuspendLayout();
             this.SuspendLayout();
             // 
             // listBox_log
@@ -129,7 +141,7 @@
             // label_imageInfo
             // 
             this.label_imageInfo.AutoSize = true;
-            this.label_imageInfo.Location = new Point(732, 378);
+            this.label_imageInfo.Location = new Point(732, 375);
             this.label_imageInfo.Name = "label_imageInfo";
             this.label_imageInfo.Size = new Size(137, 15);
             this.label_imageInfo.TabIndex = 7;
@@ -213,7 +225,7 @@
             // label_status
             // 
             this.label_status.AutoSize = true;
-            this.label_status.Location = new Point(732, 683);
+            this.label_status.Location = new Point(732, 399);
             this.label_status.Name = "label_status";
             this.label_status.Size = new Size(102, 15);
             this.label_status.TabIndex = 15;
@@ -262,7 +274,7 @@
             // label_stats
             // 
             this.label_stats.AutoSize = true;
-            this.label_stats.Location = new Point(796, 568);
+            this.label_stats.Location = new Point(815, 568);
             this.label_stats.Name = "label_stats";
             this.label_stats.Size = new Size(102, 15);
             this.label_stats.TabIndex = 20;
@@ -297,11 +309,97 @@
             this.numericUpDown_messages.ValueChanged += this.numericUpDown_messages_ValueChanged;
             this.numericUpDown_messages.Click += this.numericUpDown_messages_Click;
             // 
+            // button_saveContextJson
+            // 
+            this.button_saveContextJson.Location = new Point(651, 381);
+            this.button_saveContextJson.Name = "button_saveContextJson";
+            this.button_saveContextJson.Size = new Size(75, 23);
+            this.button_saveContextJson.TabIndex = 24;
+            this.button_saveContextJson.Text = "Save JSON";
+            this.button_saveContextJson.UseVisualStyleBackColor = true;
+            this.button_saveContextJson.Click += this.button_saveContextJson_Click;
+            // 
+            // pictureBox_cpuUsage
+            // 
+            this.pictureBox_cpuUsage.Location = new Point(6, 22);
+            this.pictureBox_cpuUsage.Name = "pictureBox_cpuUsage";
+            this.pictureBox_cpuUsage.Size = new Size(200, 100);
+            this.pictureBox_cpuUsage.TabIndex = 25;
+            this.pictureBox_cpuUsage.TabStop = false;
+            // 
+            // checkBox_monitoring
+            // 
+            this.checkBox_monitoring.AutoSize = true;
+            this.checkBox_monitoring.Checked = true;
+            this.checkBox_monitoring.CheckState = CheckState.Checked;
+            this.checkBox_monitoring.Location = new Point(6, 128);
+            this.checkBox_monitoring.Name = "checkBox_monitoring";
+            this.checkBox_monitoring.Size = new Size(61, 19);
+            this.checkBox_monitoring.TabIndex = 26;
+            this.checkBox_monitoring.Text = "Enable";
+            this.checkBox_monitoring.UseVisualStyleBackColor = true;
+            this.checkBox_monitoring.CheckedChanged += this.checkBox_monitoring_CheckedChanged;
+            // 
+            // numericUpDown_monitorInterval
+            // 
+            this.numericUpDown_monitorInterval.Increment = new decimal(new int[] { 50, 0, 0, 0 });
+            this.numericUpDown_monitorInterval.Location = new Point(146, 124);
+            this.numericUpDown_monitorInterval.Maximum = new decimal(new int[] { 5000, 0, 0, 0 });
+            this.numericUpDown_monitorInterval.Minimum = new decimal(new int[] { 50, 0, 0, 0 });
+            this.numericUpDown_monitorInterval.Name = "numericUpDown_monitorInterval";
+            this.numericUpDown_monitorInterval.Size = new Size(60, 23);
+            this.numericUpDown_monitorInterval.TabIndex = 27;
+            this.numericUpDown_monitorInterval.Value = new decimal(new int[] { 500, 0, 0, 0 });
+            this.numericUpDown_monitorInterval.ValueChanged += this.numericUpDown_monitorInterval_ValueChanged;
+            // 
+            // label_cpuUsage
+            // 
+            this.label_cpuUsage.AutoSize = true;
+            this.label_cpuUsage.Location = new Point(6, 150);
+            this.label_cpuUsage.Name = "label_cpuUsage";
+            this.label_cpuUsage.Size = new Size(116, 15);
+            this.label_cpuUsage.TabIndex = 28;
+            this.label_cpuUsage.Text = "Avg. CPU Usage: - %";
+            // 
+            // label_ramUsage
+            // 
+            this.label_ramUsage.AutoSize = true;
+            this.label_ramUsage.Location = new Point(6, 165);
+            this.label_ramUsage.Name = "label_ramUsage";
+            this.label_ramUsage.Size = new Size(100, 15);
+            this.label_ramUsage.TabIndex = 29;
+            this.label_ramUsage.Text = "RAM Usage: - MB";
+            // 
+            // progressBar_ram
+            // 
+            this.progressBar_ram.Location = new Point(6, 183);
+            this.progressBar_ram.Name = "progressBar_ram";
+            this.progressBar_ram.Size = new Size(200, 15);
+            this.progressBar_ram.TabIndex = 30;
+            // 
+            // groupBox_monitoring
+            // 
+            this.groupBox_monitoring.Controls.Add(this.pictureBox_cpuUsage);
+            this.groupBox_monitoring.Controls.Add(this.progressBar_ram);
+            this.groupBox_monitoring.Controls.Add(this.checkBox_monitoring);
+            this.groupBox_monitoring.Controls.Add(this.label_ramUsage);
+            this.groupBox_monitoring.Controls.Add(this.numericUpDown_monitorInterval);
+            this.groupBox_monitoring.Controls.Add(this.label_cpuUsage);
+            this.groupBox_monitoring.Enabled = false;
+            this.groupBox_monitoring.Location = new Point(12, 12);
+            this.groupBox_monitoring.Name = "groupBox_monitoring";
+            this.groupBox_monitoring.Size = new Size(214, 205);
+            this.groupBox_monitoring.TabIndex = 31;
+            this.groupBox_monitoring.TabStop = false;
+            this.groupBox_monitoring.Text = "Monitoring";
+            // 
             // WindowMain
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
             this.ClientSize = new Size(1224, 721);
+            this.Controls.Add(this.groupBox_monitoring);
+            this.Controls.Add(this.button_saveContextJson);
             this.Controls.Add(this.numericUpDown_messages);
             this.Controls.Add(this.button_loadContext);
             this.Controls.Add(this.label_context);
@@ -331,6 +429,10 @@
             ((System.ComponentModel.ISupportInitialize) this.pictureBox_view).EndInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_images).EndInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_messages).EndInit();
+            ((System.ComponentModel.ISupportInitialize) this.pictureBox_cpuUsage).EndInit();
+            ((System.ComponentModel.ISupportInitialize) this.numericUpDown_monitorInterval).EndInit();
+            this.groupBox_monitoring.ResumeLayout(false);
+            this.groupBox_monitoring.PerformLayout();
             this.ResumeLayout(false);
             this.PerformLayout();
         }
@@ -361,5 +463,13 @@
         private Label label_context;
         private Button button_loadContext;
         private NumericUpDown numericUpDown_messages;
+        private Button button_saveContextJson;
+        private PictureBox pictureBox_cpuUsage;
+        private CheckBox checkBox_monitoring;
+        private NumericUpDown numericUpDown_monitorInterval;
+        private Label label_cpuUsage;
+        private Label label_ramUsage;
+        private ProgressBar progressBar_ram;
+        private GroupBox groupBox_monitoring;
     }
 }

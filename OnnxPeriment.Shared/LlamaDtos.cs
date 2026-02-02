@@ -22,6 +22,7 @@ namespace OnnxPeriment.Shared
         public int StreamChunkSize { get; init; } = 64;
         public int? Seed { get; init; }
         public IReadOnlyList<string>? StopSequences { get; init; }
+
         public bool AppendStatsToResponse { get; init; } = true;
     }
 

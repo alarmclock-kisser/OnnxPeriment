@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using System.IO;
 using SixLabors.ImageSharp.Drawing.Processing;
 using OnnxPeriment.Core;
+using SixLabors.Fonts;
 
 namespace LocalLlmTestDataGenerator.Core
 {
@@ -117,7 +118,73 @@ namespace LocalLlmTestDataGenerator.Core
 			}
 		}
 
-		public ImageObj(byte[] imageData, int width, int height)
+        public ImageObj(int width, int height, float[] usages, string backColor = "#2F4F4F", string foreColor = "#32CD32", bool indicateThreadIds = false)
+		{
+			try
+			{
+				if (width <= 0 || height <= 0)
+				{
+					throw new ArgumentOutOfRangeException(nameof(width), "Width and height must be positive.");
+				}
+				this.Width = width;
+				this.Height = height;
+				var img = new Image<Rgba32>(width, height);
+				img.Mutate(c => c.Clear(Color.Black));
+				if (usages != null && usages.Length > 1)
+				{
+					int cpuCount = usages.Length - 1; // First element is total average
+					int columns = cpuCount <= 6 ? 3 : 4;
+					int rows = (int)Math.Ceiling(cpuCount / (double)columns);
+					int cellWidth = Math.Max(1, width / columns);
+					int cellHeight = Math.Max(1, height / rows);
+					int padding = Math.Max(1, Math.Min(cellWidth, cellHeight) / 8);
+
+					for (int i = 0; i < cpuCount; i++)
+					{
+						int row = i / columns;
+						int col = i % columns;
+						int x = col * cellWidth;
+						int y = row * cellHeight;
+						var cellRect = new Rectangle(x, y, cellWidth, cellHeight);
+						img.Mutate(c => c.Fill(Color.ParseHex(foreColor), cellRect));
+
+						float usage = Math.Clamp(usages[i + 1], 0f, 100f);
+						int barHeight = (int)((cellHeight - padding * 2) * (usage / 100f));
+						if (barHeight > 0)
+						{
+							var barRect = new Rectangle(
+								x + padding,
+								y + cellHeight - padding - barHeight,
+								Math.Max(1, cellWidth - padding * 2),
+								barHeight);
+							img.Mutate(c => c.Fill(Color.ParseHex(backColor), barRect));
+						}
+
+						if (indicateThreadIds)
+						{
+							string threadIdText = $"#{i}";
+							var font = SystemFonts.CreateFont("Arial", Math.Max(8, padding * 2));
+							var textOptions = new TextOptions(font)
+							{
+								HorizontalAlignment = HorizontalAlignment.Center,
+								VerticalAlignment = VerticalAlignment.Top,
+								Origin = new PointF(x + cellWidth / 2f, y + padding / 2f)
+                            };
+							img.Mutate(c => c.DrawText(threadIdText, font, Color.White, textOptions.Origin));
+                        }
+                    }
+				}
+				this.Img = img;
+			}
+			catch (Exception ex)
+			{
+				LogException(ex, "Failed to initialize ImageObj with CPU usages.");
+				throw;
+            }
+        }
+
+
+        public ImageObj(byte[] imageData, int width, int height)
 		{
 			try
 			{

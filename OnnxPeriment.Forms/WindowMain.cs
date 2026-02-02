@@ -440,14 +440,27 @@ namespace OnnxPeriment.Forms
 
         private void textBox_prompt_Enter(object sender, EventArgs e)
         {
-            try
+            if (this.Onnx.ModelIsLoaded)
             {
-                this._updatingMessages = true;
-                this.UpdateMessageNavigation(showEmpty: true);
+
             }
-            finally
+            else if (this.Llama.ModelIsLoaded)
             {
-                this._updatingMessages = false;
+                try
+                {
+                    int msgCount = this.Llama.GetContextMessagePairCount();
+                    if (msgCount == 0 || this._updatingMessages || (int) this.numericUpDown_messages.Value > msgCount)
+                    {
+                        return;
+                    }
+
+                    this._updatingMessages = true;
+                    this.UpdateMessageNavigation(showEmpty: true);
+                }
+                finally
+                {
+                    this._updatingMessages = false;
+                }
             }
         }
 

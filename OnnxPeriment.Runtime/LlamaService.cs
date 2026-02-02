@@ -199,15 +199,29 @@ namespace OnnxPeriment.Runtime
 
         public async Task<LlamaChatContext?> LoadContextAsync(string nameOrRecent)
         {
-            var normalized = NormalizeContextName(nameOrRecent);
-            if (string.IsNullOrWhiteSpace(normalized))
+            if (string.IsNullOrWhiteSpace(nameOrRecent))
             {
                 return null;
             }
 
             return await Task.Run(() =>
             {
-                var resolved = ResolveContextFilePath(normalized);
+                string? resolved;
+                if (File.Exists(nameOrRecent))
+                {
+                    resolved = Path.GetFullPath(nameOrRecent);
+                }
+                else
+                {
+                    var normalized = NormalizeContextName(nameOrRecent);
+                    if (string.IsNullOrWhiteSpace(normalized))
+                    {
+                        return null;
+                    }
+
+                    resolved = ResolveContextFilePath(normalized);
+                }
+
                 if (string.IsNullOrWhiteSpace(resolved) || !File.Exists(resolved))
                 {
                     return null;
@@ -949,7 +963,9 @@ namespace OnnxPeriment.Runtime
 
         public static string GetContextDirectory()
         {
-            var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), ".lmstudio", "contexts");
+            var dir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "OnnxPeriment_Contexts");
             return dir;
         }
 

@@ -61,6 +61,7 @@ namespace OnnxPeriment.Forms
             this.label_ramUsage = new Label();
             this.progressBar_ram = new ProgressBar();
             this.groupBox_monitoring = new GroupBox();
+            this.label_info_messageId = new Label();
             ((System.ComponentModel.ISupportInitialize) this.pictureBox_view).BeginInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_images).BeginInit();
             ((System.ComponentModel.ISupportInitialize) this.numericUpDown_messages).BeginInit();
@@ -72,7 +73,7 @@ namespace OnnxPeriment.Forms
             // listBox_log
             // 
             this.listBox_log.FormattingEnabled = true;
-            this.listBox_log.Location = new Point(12, 465);
+            this.listBox_log.Location = new Point(12, 450);
             this.listBox_log.Name = "listBox_log";
             this.listBox_log.Size = new Size(520, 244);
             this.listBox_log.TabIndex = 0;
@@ -80,7 +81,7 @@ namespace OnnxPeriment.Forms
             // 
             // button_loadOnnxModel
             // 
-            this.button_loadOnnxModel.Location = new Point(538, 628);
+            this.button_loadOnnxModel.Location = new Point(538, 613);
             this.button_loadOnnxModel.Name = "button_loadOnnxModel";
             this.button_loadOnnxModel.Size = new Size(75, 23);
             this.button_loadOnnxModel.TabIndex = 1;
@@ -93,7 +94,7 @@ namespace OnnxPeriment.Forms
             this.checkBox_enableCuda.AutoSize = true;
             this.checkBox_enableCuda.Checked = true;
             this.checkBox_enableCuda.CheckState = CheckState.Checked;
-            this.checkBox_enableCuda.Location = new Point(538, 690);
+            this.checkBox_enableCuda.Location = new Point(538, 675);
             this.checkBox_enableCuda.Name = "checkBox_enableCuda";
             this.checkBox_enableCuda.Size = new Size(96, 19);
             this.checkBox_enableCuda.TabIndex = 2;
@@ -169,6 +170,7 @@ namespace OnnxPeriment.Forms
             this.textBox_prompt.PlaceholderText = "Enter prompt here ...";
             this.textBox_prompt.Size = new Size(480, 86);
             this.textBox_prompt.TabIndex = 9;
+            this.textBox_prompt.Enter += this.textBox_prompt_Enter;
             this.textBox_prompt.KeyDown += this.textBox_prompt_KeyDown;
             // 
             // button_send
@@ -214,7 +216,7 @@ namespace OnnxPeriment.Forms
             // 
             // button_loadLlamaModel
             // 
-            this.button_loadLlamaModel.Location = new Point(538, 657);
+            this.button_loadLlamaModel.Location = new Point(538, 642);
             this.button_loadLlamaModel.Name = "button_loadLlamaModel";
             this.button_loadLlamaModel.Size = new Size(75, 23);
             this.button_loadLlamaModel.TabIndex = 14;
@@ -225,7 +227,7 @@ namespace OnnxPeriment.Forms
             // label_status
             // 
             this.label_status.AutoSize = true;
-            this.label_status.Location = new Point(732, 399);
+            this.label_status.Location = new Point(12, 697);
             this.label_status.Name = "label_status";
             this.label_status.Size = new Size(102, 15);
             this.label_status.TabIndex = 15;
@@ -233,7 +235,7 @@ namespace OnnxPeriment.Forms
             // 
             // button_backendsOnnx
             // 
-            this.button_backendsOnnx.Location = new Point(619, 628);
+            this.button_backendsOnnx.Location = new Point(619, 613);
             this.button_backendsOnnx.Name = "button_backendsOnnx";
             this.button_backendsOnnx.Size = new Size(65, 23);
             this.button_backendsOnnx.TabIndex = 16;
@@ -243,7 +245,7 @@ namespace OnnxPeriment.Forms
             // 
             // button_backendsLlama
             // 
-            this.button_backendsLlama.Location = new Point(619, 657);
+            this.button_backendsLlama.Location = new Point(619, 642);
             this.button_backendsLlama.Name = "button_backendsLlama";
             this.button_backendsLlama.Size = new Size(65, 23);
             this.button_backendsLlama.TabIndex = 17;
@@ -253,7 +255,7 @@ namespace OnnxPeriment.Forms
             // 
             // button_downloadIOnnxCuda
             // 
-            this.button_downloadIOnnxCuda.Location = new Point(690, 628);
+            this.button_downloadIOnnxCuda.Location = new Point(690, 613);
             this.button_downloadIOnnxCuda.Name = "button_downloadIOnnxCuda";
             this.button_downloadIOnnxCuda.Size = new Size(36, 23);
             this.button_downloadIOnnxCuda.TabIndex = 18;
@@ -263,7 +265,7 @@ namespace OnnxPeriment.Forms
             // 
             // button_downloadLlamaCuda
             // 
-            this.button_downloadLlamaCuda.Location = new Point(690, 657);
+            this.button_downloadLlamaCuda.Location = new Point(690, 642);
             this.button_downloadLlamaCuda.Name = "button_downloadLlamaCuda";
             this.button_downloadLlamaCuda.Size = new Size(36, 23);
             this.button_downloadLlamaCuda.TabIndex = 19;
@@ -301,7 +303,7 @@ namespace OnnxPeriment.Forms
             // 
             // numericUpDown_messages
             // 
-            this.numericUpDown_messages.Location = new Point(651, 439);
+            this.numericUpDown_messages.Location = new Point(651, 542);
             this.numericUpDown_messages.Maximum = new decimal(new int[] { 0, 0, 0, 0 });
             this.numericUpDown_messages.Name = "numericUpDown_messages";
             this.numericUpDown_messages.Size = new Size(75, 23);
@@ -393,11 +395,21 @@ namespace OnnxPeriment.Forms
             this.groupBox_monitoring.TabStop = false;
             this.groupBox_monitoring.Text = "Monitoring";
             // 
+            // label_info_messageId
+            // 
+            this.label_info_messageId.AutoSize = true;
+            this.label_info_messageId.Location = new Point(651, 524);
+            this.label_info_messageId.Name = "label_info_messageId";
+            this.label_info_messageId.Size = new Size(63, 15);
+            this.label_info_messageId.TabIndex = 32;
+            this.label_info_messageId.Text = "Message #";
+            // 
             // WindowMain
             // 
             this.AutoScaleDimensions = new SizeF(7F, 15F);
             this.AutoScaleMode = AutoScaleMode.Font;
             this.ClientSize = new Size(1224, 721);
+            this.Controls.Add(this.label_info_messageId);
             this.Controls.Add(this.groupBox_monitoring);
             this.Controls.Add(this.button_saveContextJson);
             this.Controls.Add(this.numericUpDown_messages);
@@ -471,5 +483,6 @@ namespace OnnxPeriment.Forms
         private Label label_ramUsage;
         private ProgressBar progressBar_ram;
         private GroupBox groupBox_monitoring;
+        private Label label_info_messageId;
     }
 }

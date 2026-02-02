@@ -23,6 +23,7 @@ namespace OnnxPeriment.Runtime
         private string? _loadedModelPath;
         private LLamaWeights? _weights;
         private LLamaContext? _context;
+        private ModelParams? _modelParams;
         private readonly Dictionary<string, LlamaChatContext> _contexts = new(StringComparer.OrdinalIgnoreCase);
         private LlamaChatContext? _activeContext;
 
@@ -365,7 +366,31 @@ namespace OnnxPeriment.Runtime
         {
             if (contextName == null)
             {
-                return null;
+                var active = ResolveActiveContext();
+                if (active != null)
+                {
+                    var isTransient = !_contexts.ContainsKey(active.Name);
+                    var autoSave = !string.IsNullOrWhiteSpace(this.LoadedContextFile) && File.Exists(this.LoadedContextFile);
+                    return new ManagedContext
+                    {
+                        Context = active,
+                        AutoSave = autoSave,
+                        IsTransient = isTransient
+                    };
+                }
+
+                var transient = new LlamaChatContext
+                {
+                    Name = GenerateTransientContextName(),
+                    UpdatedAt = DateTime.UtcNow
+                };
+                this._activeContext = transient;
+                return new ManagedContext
+                {
+                    Context = transient,
+                    AutoSave = false,
+                    IsTransient = true
+                };
             }
 
             var normalized = NormalizeContextName(contextName);
@@ -598,6 +623,7 @@ namespace OnnxPeriment.Runtime
                     this._context = this._weights.CreateContext(modelParams);
                 });
 
+                this._modelParams = modelParams;
                 this._loadedModelPath = fullPath;
                 StaticLogger.Log($"Model loaded: {fullPath} (GPU layers: {gpuLayers}, context: {options.ContextSize})");
                 return fullPath;
@@ -647,6 +673,12 @@ namespace OnnxPeriment.Runtime
                     FinishReason = "error"
                 };
                 yield break;
+            }
+
+            if (this._weights != null && this._modelParams != null)
+            {
+                this._context.Dispose();
+                this._context = this._weights.CreateContext(this._modelParams);
             }
 
             var managedContext = await this.ResolveContextAsync(request.Context);
@@ -776,7 +808,7 @@ namespace OnnxPeriment.Runtime
             return minIndex;
         }
 
-        public async Task<string?> GenerateTextToTextAsync(string prompt, LlamaGenerateOptions? options = null, string? context = "/recent")
+        public async Task<string?> GenerateTextToTextAsync(string prompt, LlamaGenerateOptions? options = null, string? context = null)
         {
             options ??= new LlamaGenerateOptions();
 
@@ -853,6 +885,26 @@ namespace OnnxPeriment.Runtime
             }
         }
 
+        public async Task<string?> SaveActiveContextAsNewAsync(string? name = null)
+        {
+            var active = ResolveActiveContext();
+            if (active == null)
+            {
+                return null;
+            }
+
+            var finalName = string.IsNullOrWhiteSpace(name) ? Guid.NewGuid().ToString("N") : name;
+            var newContext = new LlamaChatContext
+            {
+                Name = finalName,
+                UpdatedAt = DateTime.UtcNow,
+                Messages = new List<LlamaChatMessage>(active.Messages)
+            };
+
+            var saved = await SaveContextAsync(newContext);
+            return saved ? this.LoadedContextFile : null;
+        }
+
         private void DisposeModel()
         {
             try
@@ -868,6 +920,7 @@ namespace OnnxPeriment.Runtime
             {
                 this._context = null;
                 this._weights = null;
+                this._modelParams = null;
                 this._loadedModelPath = null;
             }
         }

@@ -438,6 +438,21 @@ namespace OnnxPeriment.Forms
 
         }
 
+        private void textBox_prompt_Enter(object sender, EventArgs e)
+        {
+            try
+            {
+                this._updatingMessages = true;
+                this.UpdateMessageNavigation(showEmpty: true);
+            }
+            finally
+            {
+                this._updatingMessages = false;
+            }
+        }
+
+
+
         // Images
         private async void button_importImage_Click(object sender, EventArgs e)
         {
@@ -561,6 +576,8 @@ namespace OnnxPeriment.Forms
                 else
                 {
                     StaticLogger.Log($"Model loaded: {loadResult}");
+                    await this.Llama.CreateContextAsync();
+                    this.UpdateMessageNavigation(showEmpty: true, jumpToLatest: true);
                     this.checkBox_enableCuda.Invoke((MethodInvoker) (() =>
                     {
                         this.checkBox_enableCuda.Enabled = false;
@@ -595,6 +612,7 @@ namespace OnnxPeriment.Forms
                     {
                         var ctx = await this.Llama.LoadContextAsync(contextPath);
                         this.UpdateMessageNavigation(jumpToLatest: true);
+                        this.UpdateStatus();
                     }
                 }
                 catch (Exception ex)
@@ -672,9 +690,14 @@ namespace OnnxPeriment.Forms
             }
             else if (this.Llama.ModelIsLoaded)
             {
-                await this.Llama.SaveContextAsync();
+                var savedPath = await this.Llama.SaveActiveContextAsNewAsync();
+                if (string.IsNullOrWhiteSpace(savedPath))
+                {
+                    MessageBox.Show("Failed to save context.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
             }
 
+            this.UpdateStatus();
         }
 
         // Request / Response
@@ -1030,8 +1053,6 @@ namespace OnnxPeriment.Forms
             }
         }
 
-       
-
-
+        
     }
 }
